@@ -287,7 +287,33 @@ void RestoreWeights(NET* Net)
     }
 }
 
+/******************************************************************************
+A C T I V A T I O N   F U N C T I O N
+******************************************************************************/
+#define SIGMOID             0
+#define RELU                1
 
+#define ACTIVATIONFUNCTION  SIGMOID
+
+REAL ComputeActivationFunction(REAL gain, REAL x)
+{
+#if ACTIVATIONFUNCTION == SIGMOID
+    return (1 / (1 + exp(-gain * x)));
+#else
+    // default: sigmoid
+    return (1 / (1 + exp(-gain * x)));
+#endif
+}
+
+REAL ComputeDerivative(REAL gain, REAL x)
+{
+#if ACTIVATIONFUNCTION == SIGMOID
+    return (gain * x * (1 - x));
+#else
+    // default: sigmoid
+    return (gain * x * (1 - x));
+#endif
+}
 /******************************************************************************
 P R O P A G A T I N G   S I G N A L S
 ******************************************************************************/
@@ -303,7 +329,7 @@ void PropagateLayer(NET* Net, LAYER* Lower, LAYER* Upper)
         for (j = 0; j <= Lower->Units; j++) {
             Sum += Upper->Weight[i][j] * Lower->Output[j];
         }
-        Upper->Output[i] = 1 / (1 + exp(-Net->Gain * Sum));
+        Upper->Output[i] = ComputeActivationFunction(Net->Gain, Sum);
     }
 }
 
@@ -316,7 +342,6 @@ void PropagateNet(NET* Net)
         PropagateLayer(Net, Net->Layer[l], Net->Layer[l + 1]);
     }
 }
-
 
 /******************************************************************************
 B A C K P R O P A G A T I N G   E R R O R S
@@ -332,7 +357,7 @@ void ComputeOutputError(NET* Net, REAL* Target)
     for (i = 1; i <= Net->OutputLayer->Units; i++) {
         Out = Net->OutputLayer->Output[i];
         Err = Target[i - 1] - Out;
-        Net->OutputLayer->Error[i] = Net->Gain * Out * (1 - Out) * Err;
+        Net->OutputLayer->Error[i] = ComputeDerivative(Net->Gain, Out) * Err;
         Net->Error += 0.5 * sqr(Err);
     }
 }
@@ -349,7 +374,7 @@ void BackpropagateLayer(NET* Net, LAYER* Upper, LAYER* Lower)
         for (j = 1; j <= Upper->Units; j++) {
             Err += Upper->Weight[j][i] * Upper->Error[j];
         }
-        Lower->Error[i] = Net->Gain * Out * (1 - Out) * Err;
+        Lower->Error[i] = ComputeDerivative(Net->Gain, Out) * Err;
     }
 }
 
@@ -448,6 +473,33 @@ void TestNet(NET* Net)
         TestError, count_pass_test);
 }
 
+void DumpNet(NET* Net)
+{
+    INT l, i, j;
+    FILE * file;
+    file = fopen("dump_net.txt", "w");
+    fprintf(file, "Number of layers: %d\n", NUM_LAYERS);
+    fprintf(file, "Input layer: %d node\n", Units[0]);
+    for (i = 0; i < NUM_LAYERS - 2; i++)
+    {
+        fprintf(file, "Hidden layer %d: %d node\n", i, Units[i + 1]);
+    }
+    
+    fprintf(file, "Output layer: %d node\n", Units[NUM_LAYERS - 1]);
+
+    for (l = 1; l < NUM_LAYERS; l++) {
+        fprintf(file, "Layer %d:\n", l);
+        for (i = 1; i <= Net->Layer[l]->Units; i++) {
+            fprintf(file, "{\n");
+            for (j = 0; j <= Net->Layer[l - 1]->Units; j++) {
+                fprintf(file, "%f, \t", Net->Layer[l]->Weight[i][j]);
+            }
+            fprintf(file, "\n},\n");
+        }
+    }
+
+    fclose(file);
+}
 
 void EvaluateNet(NET* Net)
 {
@@ -504,6 +556,7 @@ void main()
         }
     } while (NOT Stop);
 
+    DumpNet(&Net);
     TestNet(&Net);
     EvaluateNet(&Net);
 
